@@ -11,13 +11,15 @@ import (
 
 // Server contains muxer and handler methods
 type Server struct {
-	muxer *muxhttp.Muxer
+	muxer     *muxhttp.Muxer
+	directory *Directory
 }
 
 // NewServer creates a new server object and builds muxer
 func NewServer() *Server {
 	s := &Server{}
 	s.buildRoutes()
+	s.directory = NewDirectory()
 	return s
 }
 
@@ -28,6 +30,12 @@ func (s *Server) buildRoutes() {
 		log.Fatal(err)
 	}
 
+	// Add callback handler
+	s.muxer.Handle(config.Path, s.AuthCallbackHandler()).Priority(1)
+
+	// Add logout handler
+	s.muxer.Handle(config.Path+"/logout", s.LogoutHandler()).Priority(1)
+
 	// Let's build a muxer
 	for name, rule := range config.Rules {
 		matchRule := rule.formattedRule()
@@ -37,12 +45,6 @@ func (s *Server) buildRoutes() {
 			_ = s.muxer.AddRoute(matchRule, 1, s.AuthHandler(rule.Provider, name))
 		}
 	}
-
-	// Add callback handler
-	s.muxer.Handle(config.Path, s.AuthCallbackHandler())
-
-	// Add logout handler
-	s.muxer.Handle(config.Path+"/logout", s.LogoutHandler())
 
 	// Add a default handler
 	if config.DefaultAction == "allow" {
@@ -108,6 +110,14 @@ func (s *Server) AuthHandler(providerName, rule string) http.HandlerFunc {
 		valid := ValidateEmail(email, rule)
 		if !valid {
 			logger.WithField("email", email).Warn("Invalid email")
+			http.Error(w, "Not authorized", 401)
+			return
+		}
+
+		// Validate group
+		valid = ValidateGoogleGroup(s.directory, email, rule)
+		if !valid {
+			logger.WithField("email", email).Warn("Invalid google group")
 			http.Error(w, "Not authorized", 401)
 			return
 		}
