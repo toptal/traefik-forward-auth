@@ -12,6 +12,7 @@ require (
 	github.com/thomseddon/go-flags v1.4.1-0.20190507184247-a3629c504486
 	github.com/traefik/traefik/v2 v2.11.34
 	golang.org/x/oauth2 v0.34.0
+	google.golang.org/api v0.8.0
 )
 
 require (

@@ -12,12 +12,14 @@ import (
 // Server contains muxer and handler methods
 type Server struct {
 	muxer *muxhttp.Muxer
+	directory *Directory
 }
 
 // NewServer creates a new server object and builds muxer
 func NewServer() *Server {
 	s := &Server{}
 	s.buildRoutes()
+	s.directory = NewDirectory()
 	return s
 }
 
@@ -112,6 +114,22 @@ func (s *Server) AuthHandler(providerName, rule string) http.HandlerFunc {
 			return
 		}
 
+		// Validate group
+		valid = ValidateGoogleGroup(s.directory, email, rule)
+		if !valid {
+			logger.WithField("email", email).Warn("Invalid google group")
+			http.Error(w, "Not authorized", 401)
+			return
+		}
+
+		// Validate group
+		valid = ValidateGoogleGroup(s.directory, email, rule)
+		if !valid {
+			logger.WithField("email", email).Warn("Invalid google group")
+			http.Error(w, "Not authorized", 401)
+			return
+		}
+		
 		// Valid request
 		logger.Debug("Allowing valid request")
 		w.Header().Set("X-Forwarded-User", email)
