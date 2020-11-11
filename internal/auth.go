@@ -97,6 +97,32 @@ func ValidateEmail(email, ruleName string) bool {
 	return false
 }
 
+// ValidateGoogleGroup checks if the given email address is a member of any google
+// group, as defined by the "group" config parameter.
+func ValidateGoogleGroup(directory *Directory, email, ruleName string) bool {
+	// Use global config by default
+	groups := config.GoogleGroups
+
+	if rule, ok := config.Rules[ruleName]; ok {
+		// Override with rule config if found
+		if len(rule.GoogleGroups) > 0 {
+			groups = rule.GoogleGroups
+		}
+	}
+
+	// Do we have any validation to perform?
+	if len(groups) == 0 {
+		return true
+	}
+
+	// GoogleGroup validation
+	if ValidateGoogleGroups(directory, email, groups) {
+		return true
+	}
+
+	return false
+}
+
 // ValidateWhitelist checks if the email is in whitelist
 func ValidateWhitelist(email string, whitelist CommaSeparatedList) bool {
 	for _, whitelist := range whitelist {
@@ -115,6 +141,16 @@ func ValidateDomains(email string, domains CommaSeparatedList) bool {
 	}
 	for _, domain := range domains {
 		if domain == parts[1] {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateGoogleGroups checks if the email is a member of a google group
+func ValidateGoogleGroups(directory *Directory, email string, groups CommaSeparatedList) bool {
+	for _, group := range groups {
+		if directory.IsMember(email, group) {
 			return true
 		}
 	}

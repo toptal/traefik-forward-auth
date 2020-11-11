@@ -1,0 +1,44 @@
+APP_NAME = traefik-forward-auth
+
+APP_VERSION ?= $(shell git describe --tags --always)
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null)
+BRANCH ?= $(shell git symbolic-ref --short HEAD 2>/dev/null)
+TAGS = $(shell docker image inspect --format='{{ join .RepoTags " " }}' $(CONTAINER_NAME):$(APP_VERSION))
+GCE_PROJECT = toptal-hub
+CONTAINER_NAME = gcr.io/$(GCE_PROJECT)/$(APP_NAME)
+EXTRA_ARGS ?=
+
+with_commit:
+ifneq (${COMMIT},)
+	@echo -n $(eval EXTRA_ARGS += -t $(CONTAINER_NAME):$(COMMIT))
+endif
+
+with_latest:
+	@echo -n $(eval EXTRA_ARGS += -t $(CONTAINER_NAME):latest)
+
+clean:
+	@echo -n $(eval EXTRA_ARGS += --force-rm --no-cache --pull)
+
+debug:
+	@echo -n $(eval EXTRA_ARGS += --progress plain)
+
+version:
+	@echo $(APP_VERSION)
+
+image:
+	DOCKER_BUILDKIT=1 docker build $(EXTRA_ARGS) -t $(CONTAINER_NAME):$(APP_VERSION) --build-arg APP_VERSION=$(APP_VERSION) -f Dockerfile .
+
+push:
+	for tag in $(TAGS) ; do \
+	  docker push $$tag ; \
+	done
+
+bash:
+	docker run -it --entrypoint="" --rm $(CONTAINER_NAME):$(APP_VERSION) bash
+
+help:
+	docker run -it --rm $(CONTAINER_NAME):$(APP_VERSION) --help
+
+.PHONY: test
+test:
+	docker run --rm  -v "$$PWD":/usr/src/myapp -w /usr/src/myapp -v $$GOOGLE_APPLICATION_CREDENTIALS:/tmp/credentials.json:ro -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/credentials.json golang:1.13 make test
