@@ -1,24 +1,28 @@
 package tfa
 
 import (
+	"io/ioutil"
+	"sync"
+	"time"
+
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/admin/directory/v1"
-	"io/ioutil"
-	"time"
+	admin "google.golang.org/api/admin/directory/v1"
 )
 
 type Directory struct {
-	cache   map[string][]string
-	ttl     map[string]int64
+	cache   sync.Map
 	service *admin.Service
 }
 
+type CacheEntry struct {
+	Groups []string
+	TTL    int64
+}
+
 func NewDirectory() *Directory {
-	cache := make(map[string][]string)
-	ttl := make(map[string]int64)
-	return &Directory{cache, ttl, nil}
+	return &Directory{service: nil}
 }
 
 func (d *Directory) IsMember(email string, group string) bool {
@@ -30,21 +34,43 @@ func (d *Directory) IsMember(email string, group string) bool {
 	return false
 }
 
+func (d *Directory) getCache(email string) *CacheEntry {
+	if cacheEntry, ok := d.cache.Load(email); ok {
+		cacheEntry := cacheEntry.(CacheEntry)
+		return &cacheEntry
+	}
+	// Email is not found in the cache.
+	return nil
+}
+
+func (d *Directory) setCache(email string, groups []string, ttl int64) {
+	cacheEntry := CacheEntry{
+		Groups: groups,
+		TTL:    ttl,
+	}
+	d.cache.Store(email, cacheEntry)
+}
+
+func (d *Directory) deleteCache(email string) {
+	d.cache.Delete(email)
+}
+
 func (d *Directory) groups(email string) []string {
-	if ttl, ok := d.ttl[email]; !ok || time.Now().Unix() > ttl {
+	cacheEntry := d.getCache(email)
+	if cacheEntry == nil || time.Now().Unix() > cacheEntry.TTL {
 		if list, err := d.getGroups(email); err == nil {
 			log.WithFields(logrus.Fields{"email": email}).Debug("Fetched groups from API")
-			d.cache[email] = list
-			d.ttl[email] = time.Now().Unix() + config.GoogleExpirySeconds
+			ttl := time.Now().Unix() + config.GoogleExpirySeconds
+			d.setCache(email, list, ttl)
 		} else {
 			log.Error(err)
-			delete(d.cache, email)
-			delete(d.ttl, email)
+			d.deleteCache(email)
 		}
 	}
 
-	if groups, ok := d.cache[email]; ok {
-		return groups
+	cacheEntry = d.getCache(email)
+	if cacheEntry != nil {
+		return cacheEntry.Groups
 	}
 	return []string{}
 }
