@@ -56,23 +56,26 @@ func (d *Directory) deleteCache(email string) {
 }
 
 func (d *Directory) groups(email string) []string {
+	groups := []string{}
+
 	cacheEntry := d.getCache(email)
 	if cacheEntry == nil || time.Now().Unix() > cacheEntry.TTL {
 		if list, err := d.getGroups(email); err == nil {
-			log.WithFields(logrus.Fields{"email": email}).Debug("Fetched groups from API")
+			groups = list
+			log.WithFields(logrus.Fields{"email": email, "groups": groups}).Debug("Fetched groups from API")
 			ttl := time.Now().Unix() + config.GoogleExpirySeconds
 			d.setCache(email, list, ttl)
 		} else {
+			log.WithFields(logrus.Fields{"email": email}).Debug("Failed to fetch groups from API")
 			log.Error(err)
 			d.deleteCache(email)
 		}
+	} else {
+		groups = cacheEntry.Groups
+		log.WithFields(logrus.Fields{"email": email, "groups": groups}).Debug("Using groups from cache")
 	}
 
-	cacheEntry = d.getCache(email)
-	if cacheEntry != nil {
-		return cacheEntry.Groups
-	}
-	return []string{}
+	return groups
 }
 
 func (d *Directory) getGroups(email string) ([]string, error) {
